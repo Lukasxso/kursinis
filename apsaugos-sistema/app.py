@@ -2,9 +2,11 @@ import os
 from flask import Flask, render_template_string, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 app = Flask(__name__)
 
+# Konfigūruojama duomenų bazės nuoroda (Render PostgreSQL arba vietinė SQLite)
 db_url = os.environ.get('DATABASE_URL')
 if db_url:
     if db_url.startswith("postgres://"):
@@ -16,6 +18,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///security.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+# Duomenų bazės modelis pagal baigiamojo darbo architektūrą
 class Incident(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     object = db.Column(db.String(200), nullable=False)
@@ -24,13 +27,17 @@ class Incident(db.Model):
     time = db.Column(db.String(50), nullable=False)
     status = db.Column(db.String(50), nullable=False)
 
+# Sukuriamos lentelės ir pradiniai duomenys (jei bazė tuščia)
 with app.app_context():
     db.create_all()
     if not Incident.query.first():
-        db.session.add(Incident(object="Vilnius, Gedimino pr. 10", type="Judėjimo daviklis", team="Ekipažas Nr. 2", time="2026-11-10 15:10", status="Reaguojama"))
-        db.session.add(Incident(object="Kaunas, Laisvės al. 45", type="Gaisro pavojaus signalas", team="Nepaskirtas", time="2026-11-10 14:55", status="Baigta"))
+        vilnius_tz = ZoneInfo("Europe/Vilnius")
+        initial_time = datetime.now(vilnius_tz).strftime('%Y-%m-%d %H:%M')
+        db.session.add(Incident(object="Vilnius, Gedimino pr. 10", type="Judėjimo daviklis", team="Ekipažas Nr. 2", time=initial_time, status="Reaguojama"))
+        db.session.add(Incident(object="Kaunas, Laisvės al. 45", type="Gaisro pavojaus signalas", team="Nepaskirtas", time=initial_time, status="Baigta"))
         db.session.commit()
 
+# Vartotojo sąsajos HTML šablonas
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="lt">
@@ -93,7 +100,7 @@ HTML_TEMPLATE = """
             <th>Objektas / Adresas</th>
             <th>Problemos tipas</th>
             <th>Ekipažas</th>
-            <th>Laikas</th>
+            <th>Laikas (GMT+2 / LT)</th>
             <th>Būsena</th>
             <th>Veiksmai</th>
         </tr>
@@ -116,6 +123,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
+# Redagavimo puslapio HTML šablonas
 EDIT_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="lt">
@@ -168,6 +176,7 @@ EDIT_TEMPLATE = """
 </html>
 """
 
+# Maršrutai (CRUD valdymas)
 @app.route('/')
 def index():
     incidents = Incident.query.all()
@@ -179,7 +188,10 @@ def add_incident():
     inc_type = request.form.get('type')
     team = request.form.get('team')
     status = request.form.get('status')
-    time_str = datetime.now().strftime('%Y-%m-%d %H:%M')
+    
+    # Fiksuojamas tikslus vietinis Lietuvos laikas (GMT+2 / GMT+3)
+    vilnius_tz = ZoneInfo("Europe/Vilnius")
+    time_str = datetime.now(vilnius_tz).strftime('%Y-%m-%d %H:%M')
     
     new_inc = Incident(object=obj, type=inc_type, team=team, time=time_str, status=status)
     db.session.add(new_inc)
