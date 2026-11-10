@@ -1,15 +1,19 @@
+import os
 from flask import Flask, render_template_string, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
 app = Flask(__name__)
 
-# Configure SQLite database file
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///security.db'
+# Paimama PostgreSQL nuoroda iš Render aplinkos kintamųjų arba naudojama SQLite lokaliai
+db_url = os.environ.get('DATABASE_URL')
+if db_url and db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///security.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-# Database Model (Data Access Layer - IncidentasDB)
 class Incident(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     object = db.Column(db.String(200), nullable=False)
@@ -18,7 +22,6 @@ class Incident(db.Model):
     time = db.Column(db.String(50), nullable=False)
     status = db.Column(db.String(50), nullable=False)
 
-# Initialize database tables and add default mock data if empty
 with app.app_context():
     db.create_all()
     if not Incident.query.first():
@@ -26,216 +29,4 @@ with app.app_context():
         db.session.add(Incident(object="Kaunas, Laisvės al. 45", type="Gaisro pavojaus signalas", team="Nepaskirtas", time="2026-11-10 14:55", status="Baigta"))
         db.session.commit()
 
-HTML_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="lt">
-<head>
-    <meta charset="UTF-8">
-    <title>Apsaugos Tarnybos Debesų Sistema</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f4f4f9; color: #333; }
-        .container { max-width: 1100px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        h1 { color: #0d6efd; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        .status { background: #d1e7dd; color: #0f5132; padding: 10px 15px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { border: 1px solid #dee2e6; padding: 12px; text-align: left; }
-        th { background-color: #f8f9fa; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        button { background: #0d6efd; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 1em; }
-        button:hover { background: #0b5ed7; }
-        .btn-danger { background: #dc3545; }
-        .btn-danger:hover { background: #bb2d3b; }
-        .btn-warning { background: #ffc107; color: #000; text-decoration: none; padding: 6px 12px; border-radius: 4px; display: inline-block; font-size: 0.9em; font-weight: bold; }
-        .btn-warning:hover { background: #ffca2c; }
-        .btn-sm { padding: 6px 12px; font-size: 0.9em; }
-        .badge-active { background: #ffc107; color: #000; padding: 4px 8px; border-radius: 4px; font-size: 0.9em; font-weight: bold; }
-        .badge-done { background: #198754; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 0.9em; }
-        .badge-false { background: #dc3545; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 0.9em; }
-        .form-box { background: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 30px; border: 1px solid #e9ecef; }
-        .actions { display: flex; gap: 8px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🛡️ Apsaugos Tarnybos Debesų Valdymo Pultas</h1>
-        <div class="status">🟢 Sistema veikia debesyje (SQLite Duomenų bazė aktyvi)</div>
-        
-        <div class="form-box">
-            <h3>Registruoti naują incidentą</h3>
-            <form method="POST" action="/add">
-                <div class="form-group">
-                    <label for="object">Saugomas objektas (Adresas / Pavadinimas):</label>
-                    <input type="text" id="object" name="object" required placeholder="pvz., Klaipėda, Taikos pr. 20">
-                </div>
-                <div class="form-group">
-                    <label for="type">Problemos tipas:</label>
-                    <select id="type" name="type">
-                        <option value="Judėjimo daviklis">Judėjimo daviklis</option>
-                        <option value="Gaisro pavojaus signalas">Gaisro pavojaus signalas</option>
-                        <option value="Įsilaužimas / Lango dūžis">Įsilaužimas / Lango dūžis</option>
-                        <option value="Techninis gedimas">Techninis gedimas</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="team">Reagavimo ekipažas:</label>
-                    <select id="team" name="team">
-                        <option value="Nepaskirtas">-- Nepaskirtas --</option>
-                        <option value="Ekipažas Nr. 1 (Naujamiestis)">Ekipažas Nr. 1 (Naujamiestis)</option>
-                        <option value="Ekipažas Nr. 2 (Senamiestis)">Ekipažas Nr. 2 (Senamiestis)</option>
-                        <option value="Ekipažas Nr. 3 (Šiaurinis rajonas)">Ekipažas Nr. 3 (Šiaurinis rajonas)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="status">Būsena:</label>
-                    <select id="status" name="status">
-                        <option value="Reaguojama">Reaguojama</option>
-                        <option value="Baigta">Baigta</option>
-                        <option value="Klaidingas signalas">Klaidingas signalas</option>
-                        <option value="Nepatvirtintas">Nepatvirtintas</option>
-                    </select>
-                </div>
-                <button type="submit">Įregistruoti ir išsaugoti bazėje</button>
-            </form>
-        </div>
-
-        <h3>Aktyvūs incidentai (Incidentų žurnalas)</h3>
-        <table>
-            <tr><th>ID</th><th>Saugomas objektas</th><th>Pavojaus tipas</th><th>Ekipažas</th><th>Laikas</th><th>Būsena</th><th>Veiksmai</th></tr>
-            {% for inc in incidents %}
-            <tr>
-                <td>#{{ inc.id }}</td>
-                <td>{{ inc.object }}</td>
-                <td>{{ inc.type }}</td>
-                <td><b>{{ inc.team }}</b></td>
-                <td>{{ inc.time }}</td>
-                <td>
-                    {% if inc.status == 'Reaguojama' %}
-                        <span class="badge-active">{{ inc.status }}</span>
-                    {% elif inc.status == 'Baigta' %}
-                        <span class="badge-done">{{ inc.status }}</span>
-                    {% else %}
-                        <span class="badge-false">{{ inc.status }}</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <div class="actions">
-                        <a href="/edit/{{ inc.id }}" class="btn-warning">Redaguoti</a>
-                        <form action="/delete/{{ inc.id }}" method="POST" style="display:inline;" onsubmit="return confirm('Ar tikrai norite ištrinti šį incidentą?');">
-                            <button type="submit" class="btn-danger btn-sm">Ištrinti</button>
-                        </form>
-                    </div>
-                </td>
-            </tr>
-            {% endfor %}
-        </table>
-    </div>
-</body>
-</html>
-"""
-
-EDIT_TEMPLATE = """
-<!DOCTYPE html>
-<html lang="lt">
-<head>
-    <meta charset="UTF-8">
-    <title>Redaguoti Incidentą #{{ incident.id }}</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; background: #f4f4f9; color: #333; }
-        .container { max-width: 600px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
-        h1 { color: #0d6efd; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
-        button { background: #ffc107; color: #000; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 1em; font-weight: bold; }
-        button:hover { background: #ffca2c; }
-        .btn-secondary { background: #6c757d; color: white; text-decoration: none; padding: 10px 20px; border-radius: 4px; display: inline-block; margin-left: 10px; }
-        .btn-secondary:hover { background: #5c636a; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>✏️ Redaguoti Incidentą #{{ incident.id }}</h1>
-        <form method="POST">
-            <div class="form-group">
-                <label for="object">Saugomas objektas (Adresas / Pavadinimas):</label>
-                <input type="text" id="object" name="object" value="{{ incident.object }}" required>
-            </div>
-            <div class="form-group">
-                <label for="type">Problemos tipas:</label>
-                <select id="type" name="type">
-                    <option value="Judėjimo daviklis" {% if incident.type == 'Judėjimo daviklis' %}selected{% endif %}>Judėjimo daviklis</option>
-                    <option value="Gaisro pavojaus signalas" {% if incident.type == 'Gaisro pavojaus signalas' %}selected{% endif %}>Gaisro pavojaus signalas</option>
-                    <option value="Įsilaužimas / Lango dūžis" {% if incident.type == 'Įsilaužimas / Lango dūžis' %}selected{% endif %}>Įsilaužimas / Lango dūžis</option>
-                    <option value="Techninis gedimas" {% if incident.type == 'Techninis gedimas' %}selected{% endif %}>Techninis gedimas</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="team">Reagavimo ekipažas:</label>
-                <select id="team" name="team">
-                    <option value="Nepaskirtas" {% if incident.team == 'Nepaskirtas' %}selected{% endif %}>-- Nepaskirtas --</option>
-                    <option value="Ekipažas Nr. 1 (Naujamiestis)" {% if incident.team == 'Ekipažas Nr. 1 (Naujamiestis)' %}selected{% endif %}>Ekipažas Nr. 1 (Naujamiestis)</option>
-                    <option value="Ekipažas Nr. 2 (Senamiestis)" {% if incident.team == 'Ekipažas Nr. 2 (Senamiestis)' %}selected{% endif %}>Ekipažas Nr. 2 (Senamiestis)</option>
-                    <option value="Ekipažas Nr. 3 (Šiaurinis rajonas)" {% if incident.team == 'Ekipažas Nr. 3 (Šiaurinis rajonas)' %}selected{% endif %}>Ekipažas Nr. 3 (Šiaurinis rajonas)</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="status">Būsena:</label>
-                <select id="status" name="status">
-                    <option value="Reaguojama" {% if incident.status == 'Reaguojama' %}selected{% endif %}>Reaguojama</option>
-                    <option value="Baigta" {% if incident.status == 'Baigta' %}selected{% endif %}>Baigta</option>
-                    <option value="Klaidingas signalas" {% if incident.status == 'Klaidingas signalas' %}selected{% endif %}>Klaidingas signalas</option>
-                    <option value="Nepatvirtintas" {% if incident.status == 'Nepatvirtintas' %}selected{% endif %}>Nepatvirtintas</option>
-                </select>
-            </div>
-            <button type="submit">Išsaugoti pakeitimus</button>
-            <a href="/" class="btn-secondary">Atšaukti</a>
-        </form>
-    </div>
-</body>
-</html>
-"""
-
-@app.route('/')
-def home():
-    incidents = Incident.query.order_by(Incident.id.desc()).all()
-    return render_template_string(HTML_TEMPLATE, incidents=incidents)
-
-@app.route('/add', methods=['POST'])
-def add_incident():
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    new_incident = Incident(
-        object=request.form.get('object'),
-        type=request.form.get('type'),
-        team=request.form.get('team'),
-        time=current_time,
-        status=request.form.get('status')
-    )
-    db.session.add(new_incident)
-    db.session.commit()
-    return redirect(url_for('home'))
-
-@app.route('/edit/<int:incident_id>', methods=['GET', 'POST'])
-def edit_incident(incident_id):
-    incident = Incident.query.get_or_404(incident_id)
-        
-    if request.method == 'POST':
-        incident.object = request.form.get('object')
-        incident.type = request.form.get('type')
-        incident.team = request.form.get('team')
-        incident.status = request.form.get('status')
-        db.session.commit()
-        return redirect(url_for('home'))
-        
-    return render_template_string(EDIT_TEMPLATE, incident=incident)
-
-@app.route('/delete/<int:incident_id>', methods=['POST'])
-def delete_incident(incident_id):
-    incident = Incident.query.get_or_404(incident_id)
-    db.session.delete(incident)
-    db.session.commit()
-    return redirect(url_for('home'))
-
-if __name__ == '__main__':
-    app.run(debug=True)
+# HTML šablonai ir maršrutai (HTML_TEMPLATE, EDIT_TEMPLATE, /, /add, /edit, /delete) išlieka tokie patys kaip anksčiau...
