@@ -5,8 +5,8 @@ app = Flask(__name__)
 
 # Laikina atminties duomenų bazė incidentams demonstruoti
 incidents_db = [
-    {"id": 101, "object": "Vilnius, Gedimino pr. 10", "type": "Judėjimo daviklis", "time": "2026-11-10 15:10", "status": "Reaguojama"},
-    {"id": 102, "object": "Kaunas, Laisvės al. 45", "type": "Gaisro pavojaus signalas", "time": "2026-11-10 14:55", "status": "Baigta"}
+    {"id": 101, "object": "Vilnius, Gedimino pr. 10", "type": "Judėjimo daviklis", "team": "Ekipažas Nr. 2", "time": "2026-11-10 15:10", "status": "Reaguojama"},
+    {"id": 102, "object": "Kaunas, Laisvės al. 45", "type": "Gaisro pavojaus signalas", "team": "Nepaskirtas", "time": "2026-11-10 14:55", "status": "Baigta"}
 ]
 
 HTML_TEMPLATE = """
@@ -17,7 +17,7 @@ HTML_TEMPLATE = """
     <title>Apsaugos Tarnybos Debesų Sistema</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 40px; background: #f4f4f9; color: #333; }
-        .container { max-width: 1050px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .container { max-width: 1100px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
         h1 { color: #0d6efd; border-bottom: 2px solid #eee; padding-bottom: 10px; }
         .status { background: #d1e7dd; color: #0f5132; padding: 10px 15px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; margin-top: 15px; }
@@ -25,7 +25,7 @@ HTML_TEMPLATE = """
         th { background-color: #f8f9fa; }
         .form-group { margin-bottom: 15px; }
         label { display: block; margin-bottom: 5px; font-weight: bold; }
-        input, select, textarea { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        input, select { width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
         button { background: #0d6efd; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-size: 1em; }
         button:hover { background: #0b5ed7; }
         .btn-danger { background: #dc3545; }
@@ -43,7 +43,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>🛡️ Apsaugos Tarnybos Debesų Valdymo Pultas</h1>
-        <div class="status">🟢 Sistema veikia debesyje (Render.com) – Pilnas incidentų valdymas (Redagavimas ir Šalinimas) aktyvus</div>
+        <div class="status">🟢 Sistema veikia debesyje (Render.com) – Incidentų ir reagavimo ekipažų valdymas aktyvus</div>
         
         <div class="form-box">
             <h3>Registruoti naują incidentą</h3>
@@ -62,6 +62,15 @@ HTML_TEMPLATE = """
                     </select>
                 </div>
                 <div class="form-group">
+                    <label for="team">Reagavimo ekipažas:</label>
+                    <select id="team" name="team">
+                        <option value="Nepaskirtas">-- Nepaskirtas --</option>
+                        <option value="Ekipažas Nr. 1 (Naujamiestis)">Ekipažas Nr. 1 (Naujamiestis)</option>
+                        <option value="Ekipažas Nr. 2 (Senamiestis)">Ekipažas Nr. 2 (Senamiestis)</option>
+                        <option value="Ekipažas Nr. 3 (Šiaurinis rajonas)">Ekipažas Nr. 3 (Šiaurinis rajonas)</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label for="status">Būsena:</label>
                     <select id="status" name="status">
                         <option value="Reaguojama">Reaguojama</option>
@@ -76,12 +85,13 @@ HTML_TEMPLATE = """
 
         <h3>Aktyvūs incidentai (Incidentų žurnalas)</h3>
         <table>
-            <tr><th>ID</th><th>Saugomas objektas</th><th>Pavojaus tipas</th><th>Laikas</th><th>Būsena</th><th>Veiksmai</th></tr>
+            <tr><th>ID</th><th>Saugomas objektas</th><th>Pavojaus tipas</th><th>Ekipažas</th><th>Laikas</th><th>Būsena</th><th>Veiksmai</th></tr>
             {% for inc in incidents %}
             <tr>
                 <td>#{{ inc.id }}</td>
                 <td>{{ inc.object }}</td>
                 <td>{{ inc.type }}</td>
+                <td><b>{{ inc.team }}</b></td>
                 <td>{{ inc.time }}</td>
                 <td>
                     {% if inc.status == 'Reaguojama' %}
@@ -145,6 +155,15 @@ EDIT_TEMPLATE = """
                 </select>
             </div>
             <div class="form-group">
+                <label for="team">Reagavimo ekipažas:</label>
+                <select id="team" name="team">
+                    <option value="Nepaskirtas" {% if incident.team == 'Nepaskirtas' %}selected{% endif %}>-- Nepaskirtas --</option>
+                    <option value="Ekipažas Nr. 1 (Naujamiestis)" {% if incident.team == 'Ekipažas Nr. 1 (Naujamiestis)' %}selected{% endif %}>Ekipažas Nr. 1 (Naujamiestis)</option>
+                    <option value="Ekipažas Nr. 2 (Senamiestis)" {% if incident.team == 'Ekipažas Nr. 2 (Senamiestis)' %}selected{% endif %}>Ekipažas Nr. 2 (Senamiestis)</option>
+                    <option value="Ekipažas Nr. 3 (Šiaurinis rajonas)" {% if incident.team == 'Ekipažas Nr. 3 (Šiaurinis rajonas)' %}selected{% endif %}>Ekipažas Nr. 3 (Šiaurinis rajonas)</option>
+                </select>
+            </div>
+            <div class="form-group">
                 <label for="status">Būsena:</label>
                 <select id="status" name="status">
                     <option value="Reaguojama" {% if incident.status == 'Reaguojama' %}selected{% endif %}>Reaguojama</option>
@@ -172,12 +191,14 @@ def add_incident():
     
     object_name = request.form.get('object')
     problem_type = request.form.get('type')
+    team_name = request.form.get('team')
     status = request.form.get('status')
     
     incidents_db.insert(0, {
         "id": new_id,
         "object": object_name,
         "type": problem_type,
+        "team": team_name,
         "time": current_time,
         "status": status
     })
@@ -193,6 +214,7 @@ def edit_incident(incident_id):
     if request.method == 'POST':
         incident["object"] = request.form.get('object')
         incident["type"] = request.form.get('type')
+        incident["team"] = request.form.get('team')
         incident["status"] = request.form.get('status')
         return redirect(url_for('home'))
         
