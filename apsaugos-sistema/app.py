@@ -1,13 +1,30 @@
 from flask import Flask, render_template_string, request, redirect, url_for
+from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
 app = Flask(__name__)
 
-# Laikina atminties duomenų bazė incidentams demonstruoti
-incidents_db = [
-    {"id": 101, "object": "Vilnius, Gedimino pr. 10", "type": "Judėjimo daviklis", "team": "Ekipažas Nr. 2", "time": "2026-11-10 15:10", "status": "Reaguojama"},
-    {"id": 102, "object": "Kaunas, Laisvės al. 45", "type": "Gaisro pavojaus signalas", "team": "Nepaskirtas", "time": "2026-11-10 14:55", "status": "Baigta"}
-]
+# Configure SQLite database file
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///security.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
+
+# Database Model (Data Access Layer - IncidentasDB)
+class Incident(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    object = db.Column(db.String(200), nullable=False)
+    type = db.Column(db.String(100), nullable=False)
+    team = db.Column(db.String(100), nullable=False)
+    time = db.Column(db.String(50), nullable=False)
+    status = db.Column(db.String(50), nullable=False)
+
+# Initialize database tables and add default mock data if empty
+with app.app_context():
+    db.create_all()
+    if not Incident.query.first():
+        db.session.add(Incident(object="Vilnius, Gedimino pr. 10", type="Judėjimo daviklis", team="Ekipažas Nr. 2", time="2026-11-10 15:10", status="Reaguojama"))
+        db.session.add(Incident(object="Kaunas, Laisvės al. 45", type="Gaisro pavojaus signalas", team="Nepaskirtas", time="2026-11-10 14:55", status="Baigta"))
+        db.session.commit()
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -43,7 +60,7 @@ HTML_TEMPLATE = """
 <body>
     <div class="container">
         <h1>🛡️ Apsaugos Tarnybos Debesų Valdymo Pultas</h1>
-        <div class="status">🟢 Sistema veikia debesyje (Render.com) – Incidentų ir reagavimo ekipažų valdymas aktyvus</div>
+        <div class="status">🟢 Sistema veikia debesyje (SQLite Duomenų bazė aktyvi)</div>
         
         <div class="form-box">
             <h3>Registruoti naują incidentą</h3>
@@ -79,7 +96,7 @@ HTML_TEMPLATE = """
                         <option value="Nepatvirtintas">Nepatvirtintas</option>
                     </select>
                 </div>
-                <button type="submit">Įregistruoti ir išsaugoti debesyje</button>
+                <button type="submit">Įregistruoti ir išsaugoti bazėje</button>
             </form>
         </div>
 
@@ -182,48 +199,42 @@ EDIT_TEMPLATE = """
 
 @app.route('/')
 def home():
-    return render_template_string(HTML_TEMPLATE, incidents=incidents_db)
+    incidents = Incident.query.order_by(Incident.id.desc()).all()
+    return render_template_string(HTML_TEMPLATE, incidents=incidents)
 
 @app.route('/add', methods=['POST'])
 def add_incident():
-    new_id = max([inc["id"] for inc in incidents_db]) + 1 if incidents_db else 101
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M")
-    
-    object_name = request.form.get('object')
-    problem_type = request.form.get('type')
-    team_name = request.form.get('team')
-    status = request.form.get('status')
-    
-    incidents_db.insert(0, {
-        "id": new_id,
-        "object": object_name,
-        "type": problem_type,
-        "team": team_name,
-        "time": current_time,
-        "status": status
-    })
-    
+    new_incident = Incident(
+        object=request.form.get('object'),
+        type=request.form.get('type'),
+        team=request.form.get('team'),
+        time=current_time,
+        status=request.form.get('status')
+    )
+    db.session.add(new_incident)
+    db.session.commit()
     return redirect(url_for('home'))
 
 @app.route('/edit/<int:incident_id>', methods=['GET', 'POST'])
 def edit_incident(incident_id):
-    incident = next((inc for inc in incidents_db if inc["id"] == incident_id), None)
-    if not incident:
-        return "Incidentas nerastas", 404
+    incident = Incident.query.get_or_404(incident_id)
         
     if request.method == 'POST':
-        incident["object"] = request.form.get('object')
-        incident["type"] = request.form.get('type')
-        incident["team"] = request.form.get('team')
-        incident["status"] = request.form.get('status')
+        incident.object = request.form.get('object')
+        incident.type = request.form.get('type')
+        incident.team = request.form.get('team')
+        incident.status = request.form.get('status')
+        db.session.commit()
         return redirect(url_for('home'))
         
     return render_template_string(EDIT_TEMPLATE, incident=incident)
 
 @app.route('/delete/<int:incident_id>', methods=['POST'])
 def delete_incident(incident_id):
-    global incidents_db
-    incidents_db = [inc for inc in incidents_db if inc["id"] != incident_id]
+    incident = Incident.query.get_or_404(incident_id)
+    db.session.delete(incident)
+    db.session.commit()
     return redirect(url_for('home'))
 
 if __name__ == '__main__':
