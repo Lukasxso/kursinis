@@ -5,10 +5,12 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Paimama PostgreSQL nuoroda iš Render aplinkos kintamųjų arba naudojama SQLite lokaliai
 db_url = os.environ.get('DATABASE_URL')
-if db_url and db_url.startswith("postgres://"):
-    db_url = db_url.replace("postgres://", "postgresql://", 1)
+if db_url:
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif db_url.startswith("postgresql://"):
+        db_url = db_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url or 'sqlite:///security.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
